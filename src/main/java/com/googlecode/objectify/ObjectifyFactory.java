@@ -6,6 +6,7 @@ import com.google.appengine.api.datastore.DatastoreServiceConfig;
 import com.google.appengine.api.datastore.DatastoreServiceFactory;
 import com.googlecode.objectify.cache.CachingAsyncDatastoreService;
 import com.googlecode.objectify.cache.EntityMemcache;
+import com.googlecode.objectify.encryption.EncryptionKeyStore;
 import com.googlecode.objectify.impl.CacheControlImpl;
 import com.googlecode.objectify.impl.EntityMemcacheStats;
 import com.googlecode.objectify.impl.EntityMetadata;
@@ -57,6 +58,9 @@ public class ObjectifyFactory implements Forge
 
 	/** Manages caching of entities at a low level */
 	protected EntityMemcache entityMemcache = new EntityMemcache(MEMCACHE_NAMESPACE, new CacheControlImpl(this), this.memcacheStats);
+
+	/** Supports lookups of encryption keys */
+	protected EncryptionKeyStore encryptionKeyStore;
 	
 	/**
 	 * <p>Construct an instance of the specified type.  Objectify uses this method whenever possible to create
@@ -321,5 +325,24 @@ public class ObjectifyFactory implements Forge
 	 */
 	public Keys keys() {
 		return keys;
+	}
+
+
+	/**
+	 * <p>Get the EncryptionKeyStore registered. This provides a set of keys to use for encrypting/decrypting properties
+	 * that have been annotated with @Serialize(encrypt=true)</p>
+	 * @return
+     */
+	public EncryptionKeyStore getEncryptionKeyStore() {
+		return this.encryptionKeyStore;
+	}
+
+	/**
+	 * Registers the EncryptionKeyStore to use to lookup encryption keys by key-id.
+	 *
+	 * @param encryptionKeyStore
+     */
+	public void setEncryptionKeyStore(EncryptionKeyStore encryptionKeyStore) {
+		this.encryptionKeyStore = encryptionKeyStore;
 	}
 }
