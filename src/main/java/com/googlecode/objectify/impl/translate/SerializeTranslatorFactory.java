@@ -1,8 +1,8 @@
 package com.googlecode.objectify.impl.translate;
 
 import com.google.appengine.api.datastore.Blob;
+import com.googlecode.objectify.ObjectifyFactory;
 import com.googlecode.objectify.annotation.Serialize;
-import com.googlecode.objectify.encryption.EncryptionKeyStore;
 import com.googlecode.objectify.impl.Path;
 
 import javax.crypto.*;
@@ -12,6 +12,7 @@ import java.io.*;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.util.SortedMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -40,6 +41,11 @@ public class SerializeTranslatorFactory implements TranslatorFactory<Object, Blo
 		// one of standard Java cipher implementations: https://docs.oracle.com/javase/7/docs/api/javax/crypto/Cipher.html
 
 		// Q: use an enum for this??
+
+		//TODO: this is somewhat coupled to key type; nothing about KeyStoreService requires that it gives AES keys, but this implemention choice assumes it
+		// CBC (block cipher mode) and padding are NOT coupled to key, but if we did couple
+		// them than we could rotate keys AND cipher methods with a load-and-save schema migration
+		// see: https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#Common_modes
 		public static final String DEFAULT_CIPHER_TRANSFORMATION = "AES/CBC/PKCS5Padding";
 
 		public static final long serialVersionUID = 1L;
@@ -75,12 +81,13 @@ public class SerializeTranslatorFactory implements TranslatorFactory<Object, Blo
 		if (serializeAnno == null)
 			return null;
 
-		final EncryptionKeyStore encryptionKeyStore = ctx.getFactory().getEncryptionKeyStore();
+		// we need to stash factory reference here, rather than EncryptionKeyStore, bc
+		// entity may be registered before EncryptionKeyStore
+		final ObjectifyFactory fact = ctx.getFactory();
 
 		return new ValueTranslator<Object, Blob>(Blob.class) {
 			@Override
 			protected Object loadValue(Blob value, LoadContext ctx, Path path) throws SkipException {
-
 
 				// Need to be careful here because we don't really know if the data was serialized or not.  Start
 				// with whatever the annotation says, and if that doesn't work, try the other option.
@@ -158,9 +165,11 @@ public class SerializeTranslatorFactory implements TranslatorFactory<Object, Blo
 				} else {
 					SecretKeySpec key = keyMap.get(keyMap.firstKey());
 
-					//TODO: generate this at random to make secure; this is like salt; TBH, I'm unclear on exact distinction
-					byte[] ivBytes = "something-that-should-be-random".getBytes();
+					//AES IV length must match key length
+					byte[] ivBytes = new byte[key.getEncoded().length];
 
+					SecureRandom secureRandom = new SecureRandom();
+					secureRandom.nextBytes(ivBytes);
 					IvParameterSpec ivSpec = new IvParameterSpec(ivBytes);
 
 					try {
@@ -200,12 +209,11 @@ public class SerializeTranslatorFactory implements TranslatorFactory<Object, Blo
 				return ois.readObject();
 			}
 
-
 			private SortedMap<String, SecretKeySpec> getKeyMap() {
-				if (encryptionKeyStore == null) {
+				if (fact.getEncryptionKeyStore() == null) {
 					log.log(Level.WARNING, "No EncryptionKeyStore registered");
 				} else {
-					return encryptionKeyStore.getEncryptionKeys();
+					return fact.getEncryptionKeyStore().getEncryptionKeys();
 				}
 				return null;
 			}
@@ -214,7 +222,7 @@ public class SerializeTranslatorFactory implements TranslatorFactory<Object, Blo
 			 * attempt to decrypt value
              */
 			private byte[] decrypt (Blob value, LoadContext ctx)
-					throws NoSuchFieldException, IllegalAccessException, NoSuchPaddingException, NoSuchAlgorithmException, InvalidAlgorithmParameterException, InvalidKeyException, ShortBufferException, BadPaddingException, IllegalBlockSizeException, IOException {
+					throws NoSuchFieldException, IllegalAccessException, NoSuchPaddingException, NoSuchAlgorithmException, InvalidAlgorithmParameterException, InvalidKeyException, ShortBufferException, BadPaddingException, IllegalBlockSizeException, IOException, ClassNotFoundException {
 
 				SortedMap<String, SecretKeySpec> keyMap = getKeyMap();
 				byte[] decrypted;
@@ -241,9 +249,9 @@ public class SerializeTranslatorFactory implements TranslatorFactory<Object, Blo
 
 						decrypted = new byte[cipher.getOutputSize(value.getBytes().length)];
 
-						int dec_len = cipher.update(value.getBytes(), 0, value.getBytes().length, decrypted, 0);
+						int dec_len = cipher.update(encrypted.encryptedValue, 0, encrypted.encryptedValue.length, decrypted, 0);
 						cipher.doFinal(decrypted, dec_len);
-					} catch (IOException | ClassNotFoundException e) {
+					} catch (ClassCastException e) {
 						//assume it's NOT encrypted
 						decrypted = value.getBytes();
 					}

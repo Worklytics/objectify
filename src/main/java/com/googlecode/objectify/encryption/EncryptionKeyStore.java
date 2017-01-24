@@ -21,6 +21,9 @@ public interface EncryptionKeyStore {
      *
      * build keys w something like new SecretKeySpec(plainKey.getBytes(), "AES");
      *
+     * TODO: what if we want to rotate the Cipher approach?? should that be considered
+     * part of the key identity too?
+     *
      * @return
      */
     SortedMap<String, SecretKeySpec> getEncryptionKeys();
