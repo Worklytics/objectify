@@ -213,7 +213,12 @@ public class SerializeTranslatorFactory implements TranslatorFactory<Object, Blo
 				if (fact.getEncryptionKeyStore() == null) {
 					log.log(Level.WARNING, "No EncryptionKeyStore registered");
 				} else {
-					return fact.getEncryptionKeyStore().getEncryptionKeys();
+					SortedMap<String, SecretKeySpec> keyMap = fact.getEncryptionKeyStore().getEncryptionKeys();
+					if (keyMap.isEmpty()) {
+						log.log(Level.WARNING, "EncryptionKeyStore did not provide any keys");
+					} else {
+						return keyMap;
+					}
 				}
 				return null;
 			}
