@@ -41,4 +41,20 @@ public @interface Serialize
 	 * If zip is true, sets the compression level of the Deflater.
 	 */
 	int compressionLevel() default Deflater.DEFAULT_COMPRESSION;
+
+
+	/**
+	 * If true and you've registered an EncryptionKeyStore on Objectify, the data stream will be encrypted using
+	 * AES 256-bit encryption.
+	 *
+	 *
+	 * Q: how should we implement migrating from encrypted --> unencrypted data?
+	 *
+	 * eg, with this, we can encrypt data by annotated fields w `@Serialize(encrypt=true)` and loading an saving everything
+	 * but there's no analogous way to elegantly decrypt data; that said, Ofy doesn't provide a simple method to move
+	 * from serialized --> unserialize data either I think; if you remove @Serialize annotation entirely, Ofy will
+	 * just choke on load, right?
+	 *
+     */
+	boolean encrypt() default false;
 }
